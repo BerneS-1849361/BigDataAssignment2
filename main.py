@@ -1,5 +1,5 @@
-import itertools
 import xml.sax
+from sklearn.cluster import MiniBatchKMeans
 # Author: Jasper Volders
 # Author: Berne Sannen
 
@@ -13,7 +13,7 @@ class Handler(xml.sax.ContentHandler):
         self.field = field
         self.skip = False
 
-        
+
 
 
     # Call when an element starts
