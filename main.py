@@ -1,3 +1,4 @@
+import random
 import xml.sax
 
 import numpy
@@ -99,6 +100,19 @@ class BFR:
             compressionSet.addPoint(point)
         self.compressionSets.append(compressionSet)
 
+    def __str__(self):
+        string = "clusters: " + str(len(self.clusters)) + "\n"
+        for cluster in self.clusters:
+            string += "\t" + str(cluster.centroid) + "\n"
+        string += "compression: " + str(len(self.compressionSets)) + "\n"
+        for cluster in self.compressionSets:
+            string += "\t" + str(cluster.centroid) + "\n"
+        string += "retain: " + str(len(self.retainSet)) + "\n"
+        for point in self.retainSet:
+            string += "\t" + str(point) + "\n"
+
+        return string
+
 
 class Handler(xml.sax.ContentHandler):
     def __init__(self, field, intervalSize, overlapSize, startYear):
@@ -113,7 +127,9 @@ class Handler(xml.sax.ContentHandler):
         self.startYear = startYear
 
         self.intervalArray = self.createIntervals()
-        self.data = [[]] * len(self.intervalArray)
+        self.data = []
+        for i in range(len(self.intervalArray)):
+            self.data.append([])
     # Call when an element starts
     def startElement(self, tag, attributes):
         self.CurrentData = tag
@@ -161,40 +177,55 @@ def lev_metric(x, y):
     i, j = int(x[0]), int(y[0])     # extract indices
     return levenshtein(handler.data[i], handler.data[j])
 
+
+def getDistanceMatrix(interval):
+    matrix = [[]] * len(interval)
+    for row in range(len(interval)):
+        matrix[row] = [0] * len(interval)
+        for col in range(len(interval)):
+            matrix[row][col] = levenshtein(interval[row], interval[col])
+
+    return matrix
+
 if __name__ == '__main__':
-    # source = "dblp50000.xml"
-    #
-    # # create an XMLReader
-    # parser = xml.sax.make_parser()
-    # # turn off namepsaces
-    # parser.setFeature(xml.sax.handler.feature_namespaces, 0)
-    #
-    # # override the default ContextHandler
-    #
-    # handler = Handler("pkdd", 10, 2, 1936)
-    # parser.setContentHandler(handler)
-    #
-    #
-    # #parse file with the first pass
-    # parser.parse(source)
-    #
-    #
+    source = "dblp50000.xml"
+
+    # create an XMLReader
+    parser = xml.sax.make_parser()
+    # turn off namepsaces
+    parser.setFeature(xml.sax.handler.feature_namespaces, 0)
+
+    # override the default ContextHandler
+
+    handler = Handler("pkdd", 10, 2, 1936)
+    parser.setContentHandler(handler)
+
+
+    #parse file with the first pass
+    parser.parse(source)
     # print(handler.data)
 
-    bfr = BFR(2, 4, 3, [[5, 6, 5, 5], [10, 11, 10, 10]])
-    bfr.add([5, 5, 6, 5])
-    bfr.add([5, 5, 5, 5])
-    bfr.add([10, 10, 11, 10])
-    bfr.add([10, 10, 10, 10])
+    for interval in handler.data:
+        if len(interval) <= 2:
+            continue
+        distanceMatrix = getDistanceMatrix(interval)
+        # print(distanceMatrix)
 
-    print(bfr.clusters[0].centroid, bfr.clusters[1].centroid)
+        randomPoints = []
+        for i in range(4):
+            randomPoints.append(distanceMatrix[random.randint(0, len(interval) - 1)])
+
+        bfr = BFR(4, len(interval), 1, randomPoints)
+        print(bfr)
 
 
-
-
-
-
-
+    # bfr = BFR(2, 4, 3, [[5, 6, 5, 5], [10, 11, 10, 10]])
+    # bfr.add([5, 5, 6, 5])
+    # bfr.add([5, 5, 5, 5])
+    # bfr.add([10, 10, 11, 10])
+    # bfr.add([10, 10, 10, 10])
+    # bfr.add([0,0,0,0])
+    # bfr.add([0,1,0,2])
 
 
 
