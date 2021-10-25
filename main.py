@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 class Cluster():
     def __init__(self, dimension, maxDistance):
+        self.dimension = dimension
         self.centroid = [0] * dimension
         self.maxDistance = maxDistance
         self.n = 0
@@ -30,6 +31,13 @@ class Cluster():
 
     def getDistance(self, point):
         return numpy.linalg.norm(numpy.subtract(self.centroid, point))
+
+    def merge(self, cluster):
+        self.n += cluster.n
+        for i in range(self.dimension):
+            self.sum[i] += cluster.sum[i]
+            self.sumq[i] += cluster.sumq[i]
+            self.centroid[i] = self.sum[i] / self.n
 
 
 class BFR:
@@ -56,11 +64,10 @@ class BFR:
             distance = cluster.getDistance(point)
             if distance < minCluster[1]:
                 minCluster = (cluster, distance)
-        #add point to cluster
+        # add point to cluster
         if minCluster[0].isClose(point):
             minCluster[0].addPoint(point)
             return
-
 
         # check if point should be in compression set
         minCompressionSet = (None, numpy.infty)
@@ -76,14 +83,15 @@ class BFR:
         closePoints = []
         for retainer in self.retainSet:
             if numpy.linalg.norm(numpy.subtract(retainer, point)) <= self.maxDistance:
-                self.retainSet.remove(retainer)
                 closePoints.append(retainer)
+
+        for point in closePoints:
+            self.retainSet.remove(point)
 
         if len(closePoints) != 0:
             closePoints.append(point)
             self.compress(closePoints)
             return
-
 
         # add point to retained sets
         self.retain(point)
@@ -100,13 +108,37 @@ class BFR:
             compressionSet.addPoint(point)
         self.compressionSets.append(compressionSet)
 
+    def cleanUp(self):
+        for compressionSet in self.compressionSets:
+            minCluster = (None, numpy.infty)
+            for cluster in self.clusters:
+                distance = cluster.getDistance(compressionSet.centroid)
+                if distance < minCluster[1]:
+                    minCluster = (cluster, distance)
+            if minCluster[0]:
+                minCluster[0].merge(compressionSet)
+        self.compressionSets.clear()
+
+        for point in self.retainSet:
+            minCluster = (None, numpy.infty)
+            for cluster in self.clusters:
+                distance = cluster.getDistance(point)
+                if distance < minCluster[1]:
+                    minCluster = (cluster, distance)
+            if minCluster[0]:
+                minCluster[0].addPoint(point)
+        self.retainSet.clear()
+
+
     def __str__(self):
-        string = "clusters: " + str(len(self.clusters)) + "\n"
+        string = "dimension: " + str(self.dimension) + "\t max distance: " + str(self.maxDistance) + "\n"
+
+        string += "clusters: " + str(len(self.clusters)) + "\n"
         for cluster in self.clusters:
-            string += "\t" + str(cluster.centroid) + "\n"
+            string += "\tsize: " + str(cluster.n) + " centroid:" + str(cluster.centroid) + "\n"
         string += "compression: " + str(len(self.compressionSets)) + "\n"
         for cluster in self.compressionSets:
-            string += "\t" + str(cluster.centroid) + "\n"
+            string += "\tsize: " + str(cluster.n) + str(cluster.centroid) + "\n"
         string += "retain: " + str(len(self.retainSet)) + "\n"
         for point in self.retainSet:
             string += "\t" + str(point) + "\n"
@@ -129,7 +161,7 @@ class Handler(xml.sax.ContentHandler):
         self.intervalArray = self.createIntervals()
         self.data = []
         for i in range(len(self.intervalArray)):
-            self.data.append([])
+            self.data.append((self.intervalArray[i], []))
     # Call when an element starts
     def startElement(self, tag, attributes):
         self.CurrentData = tag
@@ -152,7 +184,7 @@ class Handler(xml.sax.ContentHandler):
                 tag == "incollection" or tag == "phdthesis" or tag == "mastersthesis" or tag == "www":
             for index in range(len(self.intervalArray)):
                 if self.intervalArray[index][0] <= self.year <= self.intervalArray[index][1]:
-                    self.data[index].append(self.title)
+                    self.data[index][1].append(self.title)
         self.CurrentData = ""
 
     # Call when a character is read
@@ -172,10 +204,6 @@ class Handler(xml.sax.ContentHandler):
             intervalArray.append((x, x + self.intervalSize))
             x += self.intervalSize - self.overlapSize
         return intervalArray
-
-def lev_metric(x, y):
-    i, j = int(x[0]), int(y[0])     # extract indices
-    return levenshtein(handler.data[i], handler.data[j])
 
 
 def getDistanceMatrix(interval):
@@ -197,7 +225,7 @@ if __name__ == '__main__':
 
     # override the default ContextHandler
 
-    handler = Handler("pkdd", 10, 2, 1936)
+    handler = Handler("pkdd", 5, 2, 1992)
     parser.setContentHandler(handler)
 
 
@@ -205,8 +233,10 @@ if __name__ == '__main__':
     parser.parse(source)
     # print(handler.data)
 
-    for interval in handler.data:
+    for year, interval in handler.data:
+        print(year)
         if len(interval) <= 2:
+            print("no articles found")
             continue
         distanceMatrix = getDistanceMatrix(interval)
         # print(distanceMatrix)
@@ -215,7 +245,13 @@ if __name__ == '__main__':
         for i in range(4):
             randomPoints.append(distanceMatrix[random.randint(0, len(interval) - 1)])
 
-        bfr = BFR(4, len(interval), 1, randomPoints)
+        bfr = BFR(4, len(interval), 70, randomPoints)
+        for row in distanceMatrix:
+            if row not in randomPoints:
+                bfr.add(row)
+
+        bfr.cleanUp()
+
         print(bfr)
 
 
