@@ -1,4 +1,6 @@
 import xml.sax
+
+import numpy
 from leven import levenshtein
 import numpy as np
 from sklearn.cluster import dbscan, DBSCAN
@@ -6,17 +8,112 @@ import matplotlib.pyplot as plt
 # Author: Jasper Volders
 # Author: Berne Sannen
 
+class Cluster():
+    def __init__(self, dimension, maxDistance):
+        self.centroid = [0] * dimension
+        self.maxDistance = maxDistance
+        self.n = 0
+        self.sum = [0] * dimension
+        self.sumq = [0] * dimension
+
+    def addPoint(self, point):
+        self.n += 1
+        for i, number in enumerate(point):
+            self.sum[i] += number
+            self.sumq[i] += (number ** 2)
+            self.centroid[i] = self.sum[i] / self.n
+
+
+    def isClose(self, point):
+        return self.getDistance(point) <= self.maxDistance
+
+    def getDistance(self, point):
+        return numpy.linalg.norm(numpy.subtract(self.centroid, point))
+
+
+class BFR:
+    def __init__(self, numberOfClusters, dimension, maxDistance, startPoints):
+        self.numberOfClusters = numberOfClusters
+
+        self.dimension = dimension
+        self.maxDistance = maxDistance
+        self.clusters = []
+        for index in range(numberOfClusters):
+            cluster = Cluster(dimension, maxDistance)
+            cluster.addPoint(startPoints[index])
+            self.clusters.append(cluster)
+        self.compressionSets = []
+        self.retainSet = []
+
+    # check if point is close to a cluster or the retained points
+    # if so add it to said compression or cluster
+    # if not add to retained set
+    def add(self, point):
+        # check if point should be in cluster
+        minCluster = (None, numpy.infty)
+        for cluster in self.clusters:
+            distance = cluster.getDistance(point)
+            if distance < minCluster[1]:
+                minCluster = (cluster, distance)
+        #add point to cluster
+        if minCluster[0].isClose(point):
+            minCluster[0].addPoint(point)
+            return
+
+
+        # check if point should be in compression set
+        minCompressionSet = (None, numpy.infty)
+        for compressionSet in self.compressionSets:
+            distance = compressionSet.getDistance(point)
+            if distance < minCompressionSet[1]:
+                minCompressionSet = (compressionSet, distance)
+        # add point to compression set
+        if minCompressionSet[0] and minCompressionSet[0].isClose(point):
+            minCompressionSet[0].addPoint(point)
+            return
+
+        closePoints = []
+        for retainer in self.retainSet:
+            if numpy.linalg.norm(numpy.subtract(retainer, point)) <= self.maxDistance:
+                self.retainSet.remove(retainer)
+                closePoints.append(retainer)
+
+        if len(closePoints) != 0:
+            closePoints.append(point)
+            self.compress(closePoints)
+            return
+
+
+        # add point to retained sets
+        self.retain(point)
+
+
+    # add point to retain set
+    def retain(self, point):
+        self.retainSet.append(point)
+
+    # add point to a compression set and forget point
+    def compress(self, points):
+        compressionSet = Cluster(self.dimension, self.maxDistance)
+        for point in points:
+            compressionSet.addPoint(point)
+        self.compressionSets.append(compressionSet)
+
 
 class Handler(xml.sax.ContentHandler):
-    def __init__(self, field):
+    def __init__(self, field, intervalSize, overlapSize, startYear):
         self.title = ""
         self.year = 0
         self.key = ""
         self.field = field
         self.skip = False
 
-        self.data = []
+        self.intervalSize = intervalSize
+        self.overlapSize = overlapSize
+        self.startYear = startYear
 
+        self.intervalArray = self.createIntervals()
+        self.data = [[]] * len(self.intervalArray)
     # Call when an element starts
     def startElement(self, tag, attributes):
         self.CurrentData = tag
@@ -37,8 +134,9 @@ class Handler(xml.sax.ContentHandler):
         # if the element is an article add the articles combinations to the bucket
         if tag == "article" or tag == "inproceedings" or tag == "proceedings" or tag == "book" or \
                 tag == "incollection" or tag == "phdthesis" or tag == "mastersthesis" or tag == "www":
-            if self.year > 1990 and self.year <= 2000:
-                self.data.append(self.title)
+            for index in range(len(self.intervalArray)):
+                if self.intervalArray[index][0] <= self.year <= self.intervalArray[index][1]:
+                    self.data[index].append(self.title)
         self.CurrentData = ""
 
     # Call when a character is read
@@ -50,62 +148,48 @@ class Handler(xml.sax.ContentHandler):
         if self.CurrentData == "title":
             self.title = content
 
+
+    def createIntervals(self):
+        intervalArray = []
+        x = self.startYear
+        while x <= 2021:
+            intervalArray.append((x, x + self.intervalSize))
+            x += self.intervalSize - self.overlapSize
+        return intervalArray
+
 def lev_metric(x, y):
     i, j = int(x[0]), int(y[0])     # extract indices
     return levenshtein(handler.data[i], handler.data[j])
 
 if __name__ == '__main__':
-    source = "dblp50000.xml"
+    # source = "dblp50000.xml"
+    #
+    # # create an XMLReader
+    # parser = xml.sax.make_parser()
+    # # turn off namepsaces
+    # parser.setFeature(xml.sax.handler.feature_namespaces, 0)
+    #
+    # # override the default ContextHandler
+    #
+    # handler = Handler("pkdd", 10, 2, 1936)
+    # parser.setContentHandler(handler)
+    #
+    #
+    # #parse file with the first pass
+    # parser.parse(source)
+    #
+    #
+    # print(handler.data)
 
-    # create an XMLReader
-    parser = xml.sax.make_parser()
-    # turn off namepsaces
-    parser.setFeature(xml.sax.handler.feature_namespaces, 0)
+    bfr = BFR(2, 4, 3, [[5, 6, 5, 5], [10, 11, 10, 10]])
+    bfr.add([5, 5, 6, 5])
+    bfr.add([5, 5, 5, 5])
+    bfr.add([10, 10, 11, 10])
+    bfr.add([10, 10, 10, 10])
 
-    # override the default ContextHandler
-
-    handler = Handler("pkdd")
-    parser.setContentHandler(handler)
-
-
-    #parse file with the first pass
-    parser.parse(source)
-
-    X = np.arange(len(handler.data)).reshape(-1, 1)
-    db = DBSCAN(eps=0.3, min_samples=10).fit(X)
-    core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
-    core_samples_mask[db.core_sample_indices_] = True
-    labels = db.labels_
-
-    # Number of clusters in labels, ignoring noise if present.
-    n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
-    n_noise_ = list(labels).count(-1)
-
-    print(handler.data)
-    print(len(handler.data))
+    print(bfr.clusters[0].centroid, bfr.clusters[1].centroid)
 
 
-    # Black removed and is used for noise instead.
-    unique_labels = set(labels)
-    colors = [plt.cm.Spectral(each)
-              for each in np.linspace(0, 1, len(unique_labels))]
-    for k, col in zip(unique_labels, colors):
-        if k == -1:
-            # Black used for noise.
-            col = [0, 0, 0, 1]
-
-        class_member_mask = (labels == k)
-
-        xy = X[class_member_mask & core_samples_mask]
-        plt.plot(xy[:, 0], xy[:, 0], 'o', markerfacecolor=tuple(col),
-                 markeredgecolor='k', markersize=14)
-
-        xy = X[class_member_mask & ~core_samples_mask]
-        plt.plot(xy[:, 0], xy[:, 0], 'o', markerfacecolor=tuple(col),
-                 markeredgecolor='k', markersize=6)
-
-    plt.title('Estimated number of clusters: %d' % n_clusters_)
-    plt.show()
 
 
 
