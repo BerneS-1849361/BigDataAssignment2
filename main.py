@@ -35,9 +35,11 @@ class ClusterKmeans:
 
         return similarWord
 
+    # returns the distance of the given point to the centroid of the cluster
     def getDistance(self, point):
         return numpy.linalg.norm(numpy.subtract(self.centroid, point))
 
+    # updates the centroid of the cluster so it represents all the points in the cluster atm
     def updateCentroid(self):
         sumPoint = [0] * self.dimension
         for point in self.points:
@@ -50,6 +52,7 @@ class ClusterKmeans:
             else:
                 self.centroid[index] = 0
 
+    # returns all the possible topics in a dict with their frequency
     def getTopics(self):
         for title in self.titles:
             title = title.lower()
@@ -78,6 +81,7 @@ class ClusterKmeans:
         return str
 
 
+# Kmeans clustering algorithm
 class Kmeans:
     def __init__(self, numberOfClusters, dimension, startPoints, startTitles):
         self.numberOfClusters = numberOfClusters
@@ -90,15 +94,14 @@ class Kmeans:
             cluster.updateCentroid()
             self.clusters.append(cluster)
 
-    # check if point is close to a cluster or the retained points
-    # if so add it to said compression or cluster
-    # if not add to retained set
+    # adds the point to the cluster that is closed to the point
     def add(self, point, title):
         # check if point should be in cluster
         minCluster = self.getMinCluster(point)
         # add point to cluster
         minCluster.addPoint(point, title)
 
+    # shuffles the points between clusters after updating their centroids so that they now are again in the closed cluster
     def reassignPoints(self):
         for cluster in self.clusters:
             cluster.updateCentroid()
@@ -114,6 +117,7 @@ class Kmeans:
             clusterTo.addPoint(point, similarWord)
         return len(pointsToReassign) > 0
 
+    # returns the cluster that is closed to the given point
     def getMinCluster(self, point):
         minCluster = (None, numpy.inf)
         for cluster in self.clusters:
@@ -122,6 +126,7 @@ class Kmeans:
                 minCluster = (cluster, distance)
         return minCluster[0]
 
+    # to string function so the clusters can be printed
     def __str__(self):
         # string = "dimension: " + str(self.dimension) + "\n"
 
@@ -137,6 +142,7 @@ class Kmeans:
         return string
 
 
+# class for handling the xml parsing
 class Handler(xml.sax.ContentHandler):
     def __init__(self, fields, intervalSize, overlapSize, startYear):
         self.title = ""
@@ -197,6 +203,7 @@ class Handler(xml.sax.ContentHandler):
         return intervalArray
 
 
+# get the distancematrix of all the titles in the interval
 def getDistanceMatrix(interval):
     matrix = [[]] * len(interval)
     for row in range(len(interval)):
@@ -208,6 +215,7 @@ def getDistanceMatrix(interval):
     return matrix
 
 
+# distancefunction
 def calculateDistance(str1, str2):
     return levenshtein(str1, str2)
 
@@ -247,6 +255,7 @@ def LCSubStr(X, Y):
     return result
 
 
+# returns the point that is furthest away from the already chosen points
 def getFurthestPoint(chosenPoints, distanceMatrix):
     maxpoint = (None, 0, 0)
     idx = -1
@@ -264,6 +273,12 @@ def getFurthestPoint(chosenPoints, distanceMatrix):
 
 if __name__ == '__main__':
     source = "dblp50000.xml"
+    fields = ["kdd", "pkdd", "icdm", "sdm"]
+    intervalSize = 5
+    overlapSize = 2
+    startYear = 1992
+
+    numberOfClusters = 4
 
     # create an XMLReader
     parser = xml.sax.make_parser()
@@ -272,38 +287,45 @@ if __name__ == '__main__':
 
     # override the default ContextHandler
 
-    fields = ["kdd", "pkdd", "icdm", "sdm"]
-    handler = Handler(fields, 5, 2, 1992)
+    handler = Handler(fields, intervalSize, overlapSize, startYear)
     parser.setContentHandler(handler)
 
     # parse file with the first pass
     parser.parse(source)
 
+    # for each interval
     for year, interval in handler.data:
         print(year)
-        if len(interval) <= 2:
-            print("no articles found")
+        if len(interval) <= numberOfClusters:
+            print("not enough articles found")
             continue
+
+        # get the distance matrix of all the titles in the given interval
         distanceMatrix = getDistanceMatrix(interval)
 
-        randomPoints = []
-        randomTitles = []
+        # select 1 startpoint for every cluster
+        startPoints = []
+        startTitles = []
 
         randomIndex = random.randint(0, len(interval) - 1)
-        randomPoints.append(distanceMatrix[randomIndex])
-        randomTitles.append(interval[randomIndex])
+        startPoints.append(distanceMatrix[randomIndex])
+        startTitles.append(interval[randomIndex])
 
-        while len(randomPoints) < 4:
-            furthestPointTitle = getFurthestPoint(randomPoints, distanceMatrix)
-            randomPoints.append(furthestPointTitle[0])
-            randomTitles.append(interval[furthestPointTitle[1]])
+        while len(startPoints) < numberOfClusters:
+            furthestPointTitle = getFurthestPoint(startPoints, distanceMatrix)
+            startPoints.append(furthestPointTitle[0])
+            startTitles.append(interval[furthestPointTitle[1]])
 
-        kmeans = Kmeans(4, len(interval), randomPoints, randomTitles)
+        # initialize kmeans with the above created startpoints
+        kmeans = Kmeans(numberOfClusters, len(interval), startPoints, startTitles)
 
+        # add all other points to kmeans
         for index, row in enumerate(distanceMatrix):
-            if row not in randomPoints:
+            if row not in startPoints:
                 kmeans.add(row, interval[index])
 
+        # while there are points being reassigned keep reassigning the points to new clusters
         while kmeans.reassignPoints():
             pass
+
         print(kmeans)
