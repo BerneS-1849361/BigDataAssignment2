@@ -278,7 +278,7 @@ if __name__ == '__main__':
     overlapSize = 2
     startYear = 1992
 
-    numberOfClusters = 4
+    numberOfClusters = 3
 
     # create an XMLReader
     parser = xml.sax.make_parser()
