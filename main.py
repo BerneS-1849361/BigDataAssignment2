@@ -394,14 +394,18 @@ def LCSubStr(X, Y):
     return result
 
 def getFurthestPoint(chosenPoints, distanceMatrix):
-    maxpoint = (None, 0)
+    maxpoint = (None, 0, 0)
+    idx = -1
     for row in distanceMatrix:
+        idx += 1
+        if row in chosenPoints:
+            continue
         distance = 0
         for point in chosenPoints:
             distance += numpy.linalg.norm(numpy.subtract(row, point))
         if distance > maxpoint[1]:
-            maxpoint = (row, distance)
-    return maxpoint
+            maxpoint = (row, distance, idx)
+    return maxpoint[0],maxpoint[2]
 
 if __name__ == '__main__':
     source = "dblp50000.xml"
@@ -439,9 +443,9 @@ if __name__ == '__main__':
         randomTitles.append(interval[randomIndex])
 
         while len(randomPoints) < 4:
-            furthestIndex = getFurthestPoint(randomPoints, distanceMatrix)[1]
-            randomPoints.append(distanceMatrix[randomIndex])
-            randomTitles.append(interval[randomIndex])
+            furthestPointTitle = getFurthestPoint(randomPoints, distanceMatrix)
+            randomPoints.append(furthestPointTitle[0])
+            randomTitles.append(interval[furthestPointTitle[1]])
 
         # for i in range(4):
         #     randomIndex = random.randint(0, len(interval) - 1)
