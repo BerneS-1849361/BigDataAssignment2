@@ -1,12 +1,16 @@
 import random
-import string
 import xml.sax
-import numpy
-# Author: Jasper Volders
-# Author: Berne Sannen
-from leven import levenshtein
 from collections import Counter
 
+import numpy
+from leven import levenshtein
+
+
+# Author: Jasper Volders
+# Author: Berne Sannen
+
+
+# cluster class for using with kmeans
 class ClusterKmeans:
     def __init__(self, dimension):
         self.dimension = dimension
@@ -17,12 +21,12 @@ class ClusterKmeans:
 
         self.skipWords = ["of", "for", "in", "and", "a", "by", "the", "on", "using", "from", "to", "with", "an"]
 
-
-
+    # adds a point to the cluster
     def addPoint(self, point, title):
         self.points.append(point)
         self.titles.append(title)
 
+    # removes a point from the cluster
     def removePoint(self, point):
         index = self.points.index(point)
         similarWord = self.titles[index]
@@ -74,41 +78,6 @@ class ClusterKmeans:
         return str
 
 
-class ClusterBFR:
-    def __init__(self, dimension, maxDistance):
-        self.dimension = dimension
-        self.centroid = [0] * dimension
-        self.maxDistance = maxDistance
-        self.n = 0
-        self.sum = [0] * dimension
-        self.sumq = [0] * dimension
-
-
-    def addPoint(self, point):
-        self.n += 1
-        for i, number in enumerate(point):
-            self.sum[i] += number
-            self.sumq[i] += (number ** 2)
-            self.centroid[i] = self.sum[i] / self.n
-
-    def addSimilarWord(self, word):
-        self.similarWords.append(word)
-
-
-    def isClose(self, point):
-        return self.getDistance(point) <= self.maxDistance
-
-    def getDistance(self, point):
-        return numpy.linalg.norm(numpy.subtract(self.centroid, point))
-
-    def merge(self, cluster):
-        self.n += cluster.n
-        for i in range(self.dimension):
-            self.sum[i] += cluster.sum[i]
-            self.sumq[i] += cluster.sumq[i]
-            self.centroid[i] = self.sum[i] / self.n
-
-
 class Kmeans:
     def __init__(self, numberOfClusters, dimension, startPoints, startTitles):
         self.numberOfClusters = numberOfClusters
@@ -154,7 +123,7 @@ class Kmeans:
         return minCluster[0]
 
     def __str__(self):
-        #string = "dimension: " + str(self.dimension) + "\n"
+        # string = "dimension: " + str(self.dimension) + "\n"
 
         string = "clusters: " + str(len(self.clusters)) + "\n"
         for cluster in self.clusters:
@@ -167,112 +136,6 @@ class Kmeans:
             string += "\n\n"
         return string
 
-
-# todo
-class BFR:
-    def __init__(self, numberOfClusters, dimension, maxDistance, startPoints):
-        self.numberOfClusters = numberOfClusters
-
-        self.dimension = dimension
-        self.maxDistance = maxDistance
-        self.clusters = []
-        for index in range(numberOfClusters):
-            cluster = ClusterBFR(dimension, maxDistance)
-            cluster.addPoint(startPoints[index])
-            self.clusters.append(cluster)
-        self.compressionSets = []
-        self.retainSet = []
-
-    # check if point is close to a cluster or the retained points
-    # if so add it to said compression or cluster
-    # if not add to retained set
-    def add(self, point):
-        # check if point should be in cluster
-        minCluster = (None, numpy.infty)
-        for cluster in self.clusters:
-            distance = cluster.getDistance(point)
-            if distance < minCluster[1]:
-                minCluster = (cluster, distance)
-        # add point to cluster
-        if minCluster[0].isClose(point):
-            minCluster[0].addPoint(point)
-            return
-
-        # check if point should be in compression set
-        minCompressionSet = (None, numpy.infty)
-        for compressionSet in self.compressionSets:
-            distance = compressionSet.getDistance(point)
-            if distance < minCompressionSet[1]:
-                minCompressionSet = (compressionSet, distance)
-        # add point to compression set
-        if minCompressionSet[0] and minCompressionSet[0].isClose(point):
-            minCompressionSet[0].addPoint(point)
-            return
-
-        closePoints = []
-        for retainer in self.retainSet:
-            if numpy.linalg.norm(numpy.subtract(retainer, point)) <= self.maxDistance:
-                closePoints.append(retainer)
-
-        for point in closePoints:
-            self.retainSet.remove(point)
-
-        if len(closePoints) != 0:
-            closePoints.append(point)
-            self.compress(closePoints)
-            return
-
-        # add point to retained sets
-        self.retain(point)
-
-
-    # add point to retain set
-    def retain(self, point):
-        self.retainSet.append(point)
-
-    # add point to a compression set and forget point
-    def compress(self, points):
-        compressionSet = ClusterBFR(self.dimension, self.maxDistance)
-        for point in points:
-            compressionSet.addPoint(point)
-        self.compressionSets.append(compressionSet)
-
-    def cleanUp(self):
-        for compressionSet in self.compressionSets:
-            minCluster = (None, numpy.infty)
-            for cluster in self.clusters:
-                distance = cluster.getDistance(compressionSet.centroid)
-                if distance < minCluster[1]:
-                    minCluster = (cluster, distance)
-            if minCluster[0]:
-                minCluster[0].merge(compressionSet)
-        self.compressionSets.clear()
-
-        for point in self.retainSet:
-            minCluster = (None, numpy.infty)
-            for cluster in self.clusters:
-                distance = cluster.getDistance(point)
-                if distance < minCluster[1]:
-                    minCluster = (cluster, distance)
-            if minCluster[0]:
-                minCluster[0].addPoint(point)
-        self.retainSet.clear()
-
-    def __str__(self):
-        string = "dimension: " + str(self.dimension) + "\t max distance: " + str(self.maxDistance) + "\n"
-
-        string += "clusters: " + str(len(self.clusters)) + "\n"
-        for cluster in self.clusters:
-            string += "\tsize: " + str(cluster.n) + " centroid:" + str(cluster.centroid) + "\n"
-        string += "compression: " + str(len(self.compressionSets)) + "\n"
-        for cluster in self.compressionSets:
-            string += "\tsize: " + str(cluster.n) + str(cluster.centroid) + "\n"
-        string += "retain: " + str(len(self.retainSet)) + "\n"
-        for point in self.retainSet:
-            string += "\t" + str(point) + "\n"
-
-        return string
-# todo
 
 class Handler(xml.sax.ContentHandler):
     def __init__(self, fields, intervalSize, overlapSize, startYear):
@@ -325,7 +188,6 @@ class Handler(xml.sax.ContentHandler):
         if self.CurrentData == "title":
             self.title = content
 
-
     def createIntervals(self):
         intervalArray = []
         x = self.startYear
@@ -349,15 +211,6 @@ def getDistanceMatrix(interval):
 def calculateDistance(str1, str2):
     return levenshtein(str1, str2)
 
-# def calculateDistance(str1, str2):
-#     count = 0
-#     words = str1.split(' ')
-#     for word in str2.split(' '):
-#         words.append(word)
-#     for word in words:
-#         if word in str1 and word in str2:
-#             count += 1
-#     return len(words) - count
 
 # source: https://www.geeksforgeeks.org/longest-common-substring-dp-29/
 def LCSubStr(X, Y):
@@ -393,6 +246,7 @@ def LCSubStr(X, Y):
                 LCSuff[i][j] = 0
     return result
 
+
 def getFurthestPoint(chosenPoints, distanceMatrix):
     maxpoint = (None, 0, 0)
     idx = -1
@@ -405,7 +259,8 @@ def getFurthestPoint(chosenPoints, distanceMatrix):
             distance += numpy.linalg.norm(numpy.subtract(row, point))
         if distance > maxpoint[1]:
             maxpoint = (row, distance, idx)
-    return maxpoint[0],maxpoint[2]
+    return maxpoint[0], maxpoint[2]
+
 
 if __name__ == '__main__':
     source = "dblp50000.xml"
@@ -421,10 +276,8 @@ if __name__ == '__main__':
     handler = Handler(fields, 5, 2, 1992)
     parser.setContentHandler(handler)
 
-
-    #parse file with the first pass
+    # parse file with the first pass
     parser.parse(source)
-    # print(handler.data)
 
     for year, interval in handler.data:
         print(year)
@@ -433,8 +286,6 @@ if __name__ == '__main__':
             continue
         distanceMatrix = getDistanceMatrix(interval)
 
-
-        # todo: make points as far away as possible
         randomPoints = []
         randomTitles = []
 
@@ -447,10 +298,6 @@ if __name__ == '__main__':
             randomPoints.append(furthestPointTitle[0])
             randomTitles.append(interval[furthestPointTitle[1]])
 
-        # for i in range(4):
-        #     randomIndex = random.randint(0, len(interval) - 1)
-        #     randomPoints.append(distanceMatrix[randomIndex])
-        #     randomTitles.append(interval[randomIndex])
         kmeans = Kmeans(4, len(interval), randomPoints, randomTitles)
 
         for index, row in enumerate(distanceMatrix):
@@ -460,23 +307,3 @@ if __name__ == '__main__':
         while kmeans.reassignPoints():
             pass
         print(kmeans)
-        # bfr = BFR(4, len(interval), 15, randomPoints)
-        # for row in distanceMatrix:
-        #     if row not in randomPoints:
-        #         bfr.add(row)
-        #
-        # bfr.cleanUp()
-        #
-        # print(bfr)
-
-
-    # bfr = BFR(2, 4, 3, [[5, 6, 5, 5], [10, 11, 10, 10]])
-    # bfr.add([5, 5, 6, 5])
-    # bfr.add([5, 5, 5, 5])
-    # bfr.add([10, 10, 11, 10])
-    # bfr.add([10, 10, 10, 10])
-    # bfr.add([0,0,0,0])
-    # bfr.add([0,1,0,2])
-
-
-
